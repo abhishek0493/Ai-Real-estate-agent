@@ -1,0 +1,9 @@
+{
+  "name": "ai-real-estate-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "dashboard",
+    "widget"
+  ]
+}

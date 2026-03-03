@@ -1,0 +1,1 @@
+"""Lead request/response schemas."""

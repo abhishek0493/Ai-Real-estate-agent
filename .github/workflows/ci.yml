@@ -1,0 +1,33 @@
+# CI Pipeline
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ----------------------------------
+  # Lint and type check
+  # ----------------------------------
+  lint:
+    runs-on: ubuntu-latest
+    steps: []
+    # TODO: Add ruff, mypy steps
+
+  # ----------------------------------
+  # Run tests
+  # ----------------------------------
+  test:
+    runs-on: ubuntu-latest
+    steps: []
+    # TODO: Add pytest steps with postgres/redis services
+
+  # ----------------------------------
+  # Build Docker image
+  # ----------------------------------
+  build:
+    runs-on: ubuntu-latest
+    steps: []
+    # TODO: Add docker build step
