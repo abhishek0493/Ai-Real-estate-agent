@@ -32,17 +32,26 @@ def _make_lead(**overrides: Any) -> Lead:
 
 
 class MockLLMClient(LLMClient):
-    """LLM client that returns a preconfigured response."""
+    """LLM client that returns preconfigured responses in sequence.
 
-    def __init__(self, response: LLMResponse) -> None:
-        self._response = response
+    If a single response is given, it is returned for every call.
+    If multiple responses are given, they are returned in order.
+    """
+
+    def __init__(self, *responses: LLMResponse) -> None:
+        self._responses = list(responses)
+        self._call_index = 0
 
     async def chat(
         self,
         messages: list[dict[str, str]],
         tools: list[dict[str, Any]],
     ) -> LLMResponse:
-        return self._response
+        if len(self._responses) == 1:
+            return self._responses[0]
+        resp = self._responses[min(self._call_index, len(self._responses) - 1)]
+        self._call_index += 1
+        return resp
 
 
 @pytest.fixture

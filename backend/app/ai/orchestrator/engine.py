@@ -57,7 +57,7 @@ class AIOrchestrator:
         Flow:
         1. Build prompt (system + history + user message)
         2. Call LLMClient.chat()
-        3. If tool_call → validate → execute → return result
+        3. If tool_call → validate → execute → follow-up LLM call → return
         4. Else → return assistant message only
         """
         history = conversation_history or []
@@ -77,7 +77,9 @@ class AIOrchestrator:
 
         # 3. Handle tool call
         if llm_response.tool_call is not None:
-            return await self._execute_tool(lead, llm_response.tool_call, llm_response.message)
+            return await self._execute_tool(
+                lead, llm_response.tool_call, messages, tool_schemas,
+            )
 
         # 4. Plain message
         return AIResponse(
@@ -89,9 +91,10 @@ class AIOrchestrator:
         self,
         lead: Lead,
         tool_call_result: ToolCallResult,
-        llm_message: str,
+        messages: list[dict[str, str]],
+        tool_schemas: list[dict[str, Any]],
     ) -> AIResponse:
-        """Validate and execute a tool call safely."""
+        """Validate and execute a tool call, then ask the LLM to respond."""
         tool_call = ToolCall(name=tool_call_result.name, arguments=tool_call_result.arguments)
 
         # Validate
@@ -119,8 +122,33 @@ class AIOrchestrator:
                 updated_state=lead.status.value,
             )
 
+        # Follow-up LLM call: tell the LLM what happened and let it
+        # generate a natural conversational response for the user.
+        follow_up_messages = messages + [
+            {
+                "role": "assistant",
+                "content": (
+                    f"[Tool executed: {tool_call.name} "
+                    f"with args {tool_call.arguments}. "
+                    f"Result: {result}. "
+                    f"Lead status is now: {lead.status.value}]"
+                ),
+            },
+            {
+                "role": "user",
+                "content": (
+                    "Now respond naturally to the user based on the tool result. "
+                    "Do NOT mention tool names or internal status codes. "
+                    "Be conversational and helpful."
+                ),
+            },
+        ]
+
+        follow_up = await self._llm.chat(follow_up_messages, tool_schemas)
+        assistant_message = follow_up.message or f"Executed {tool_call.name}."
+
         return AIResponse(
-            assistant_message=llm_message or f"Executed {tool_call.name}.",
+            assistant_message=assistant_message,
             executed_tool=tool_call.name,
             tool_result=result,
             updated_state=lead.status.value,
