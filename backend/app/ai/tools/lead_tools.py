@@ -63,3 +63,27 @@ async def handle_confirm_interest(lead: Lead, **kwargs: Any) -> dict[str, Any]:
     interested = bool(kwargs.get("interested", True))
     prev, new = _flow.confirm_interest(lead, interested=interested)
     return {"action": "confirm_interest", "previous": prev.value, "current": new.value}
+
+
+async def handle_update_preferences(lead: Lead, **kwargs: Any) -> dict[str, Any]:
+    """Store buyer preferences (parking, near station, furnished, etc.)."""
+    preferences = kwargs.get("preferences", [])
+    if isinstance(preferences, str):
+        preferences = [preferences]
+    lead.preferences = list(set(lead.preferences + preferences))
+    return {
+        "action": "update_preferences",
+        "preferences": lead.preferences,
+        "status": lead.status.value,
+    }
+
+
+async def handle_set_bedrooms(lead: Lead, **kwargs: Any) -> dict[str, Any]:
+    """Set the number of bedrooms the buyer is looking for."""
+    bedrooms = int(kwargs["bedrooms"])
+    lead.bedrooms = bedrooms
+    return {
+        "action": "set_bedrooms",
+        "bedrooms": bedrooms,
+        "status": lead.status.value,
+    }

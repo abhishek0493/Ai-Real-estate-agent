@@ -1,0 +1,137 @@
+"use client";
+
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { leadsApi, Lead, LeadDetail } from "@/services/api";
+
+function StatusBadge({ status }: { status: string }) {
+  const colors: Record<string, string> = {
+    INIT: "bg-gray-500/10 text-gray-400",
+    COLLECTING_REQUIREMENTS: "bg-blue-500/10 text-blue-400",
+    VALIDATING_BUDGET: "bg-amber-500/10 text-amber-400",
+    MATCHING: "bg-purple-500/10 text-purple-400",
+    NEGOTIATING: "bg-orange-500/10 text-orange-400",
+    CONFIRMING: "bg-indigo-500/10 text-indigo-400",
+    INTERESTED: "bg-emerald-500/10 text-emerald-400",
+    NOT_INTERESTED: "bg-red-500/10 text-red-400",
+    CLOSED: "bg-gray-500/10 text-gray-500",
+  };
+  return (
+    <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${colors[status] || "bg-gray-500/10 text-gray-400"}`}>
+      {status.replace(/_/g, " ")}
+    </span>
+  );
+}
+
+function LeadDetailPanel({ leadId, onClose }: { leadId: string; onClose: () => void }) {
+  const { data, isLoading } = useQuery<LeadDetail>({
+    queryKey: ["lead-detail", leadId],
+    queryFn: () => leadsApi.detail(leadId).then((r) => r.data),
+  });
+
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex justify-end" onClick={onClose}>
+      <div className="w-full max-w-lg bg-gray-900 border-l border-gray-800 h-full overflow-y-auto p-6" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-lg font-bold text-white">Lead Details</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-white transition">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        {isLoading ? (
+          <p className="text-gray-500">Loading…</p>
+        ) : data ? (
+          <div className="space-y-6">
+            {/* Lead info */}
+            <div className="bg-gray-800/50 rounded-xl p-4 space-y-2">
+              <div className="flex justify-between"><span className="text-gray-400 text-sm">Name</span><span className="text-white text-sm">{data.name}</span></div>
+              <div className="flex justify-between"><span className="text-gray-400 text-sm">Email</span><span className="text-white text-sm">{data.email}</span></div>
+              <div className="flex justify-between"><span className="text-gray-400 text-sm">Status</span><StatusBadge status={data.status} /></div>
+              <div className="flex justify-between"><span className="text-gray-400 text-sm">Location</span><span className="text-white text-sm">{data.preferred_location || "—"}</span></div>
+              <div className="flex justify-between"><span className="text-gray-400 text-sm">Budget</span><span className="text-white text-sm">
+                {data.budget_min && data.budget_max ? `₹${(data.budget_min / 100000).toFixed(0)}L – ₹${(data.budget_max / 100000).toFixed(0)}L` : "—"}
+              </span></div>
+            </div>
+
+            {/* Conversation */}
+            <div>
+              <h3 className="text-sm font-medium text-gray-300 mb-3">Conversation History</h3>
+              <div className="space-y-3">
+                {data.conversation_history.length === 0 ? (
+                  <p className="text-gray-500 text-sm">No messages yet</p>
+                ) : (
+                  data.conversation_history.map((m) => (
+                    <div key={m.id} className={`rounded-xl p-3 text-sm ${m.role === "user" ? "bg-indigo-600/10 border border-indigo-500/20 ml-4" : "bg-gray-800/50 mr-4"}`}>
+                      <div className="flex justify-between mb-1">
+                        <span className={`text-xs font-medium ${m.role === "user" ? "text-indigo-400" : "text-emerald-400"}`}>
+                          {m.role === "user" ? "Customer" : "AI Agent"}
+                        </span>
+                        <span className="text-xs text-gray-500">{new Date(m.created_at).toLocaleTimeString()}</span>
+                      </div>
+                      <p className="text-gray-300">{m.content}</p>
+                      {m.tool_name && <span className="text-xs text-purple-400 mt-1 block">⚡ {m.tool_name}</span>}
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+export default function LeadsPage() {
+  const [selectedLead, setSelectedLead] = useState<string | null>(null);
+  const { data: leads, isLoading } = useQuery({
+    queryKey: ["leads"],
+    queryFn: () => leadsApi.list().then((r) => r.data),
+  });
+
+  return (
+    <div>
+      <h1 className="text-2xl font-bold text-white mb-1">Leads</h1>
+      <p className="text-gray-400 text-sm mb-6">All leads generated by the AI chat agent</p>
+
+      <div className="bg-gray-900/60 border border-gray-800 rounded-2xl overflow-hidden">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-gray-800 text-gray-400 text-left">
+              <th className="px-6 py-4 font-medium">Name</th>
+              <th className="px-6 py-4 font-medium">Budget</th>
+              <th className="px-6 py-4 font-medium">Location</th>
+              <th className="px-6 py-4 font-medium">Status</th>
+              <th className="px-6 py-4 font-medium">Created</th>
+            </tr>
+          </thead>
+          <tbody>
+            {isLoading ? (
+              <tr><td colSpan={5} className="px-6 py-8 text-center text-gray-500">Loading…</td></tr>
+            ) : leads?.length === 0 ? (
+              <tr><td colSpan={5} className="px-6 py-8 text-center text-gray-500">No leads yet</td></tr>
+            ) : (
+              leads?.map((l) => (
+                <tr key={l.id} onClick={() => setSelectedLead(l.id)}
+                  className="border-b border-gray-800/50 hover:bg-gray-800/30 cursor-pointer transition">
+                  <td className="px-6 py-4 text-white font-medium">{l.name}</td>
+                  <td className="px-6 py-4 text-gray-300">
+                    {l.budget_min && l.budget_max ? `₹${(l.budget_min / 100000).toFixed(0)}L – ₹${(l.budget_max / 100000).toFixed(0)}L` : "—"}
+                  </td>
+                  <td className="px-6 py-4 text-gray-300">{l.preferred_location || "—"}</td>
+                  <td className="px-6 py-4"><StatusBadge status={l.status} /></td>
+                  <td className="px-6 py-4 text-gray-500">{new Date(l.created_at).toLocaleDateString()}</td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {selectedLead && <LeadDetailPanel leadId={selectedLead} onClose={() => setSelectedLead(null)} />}
+    </div>
+  );
+}

@@ -44,12 +44,36 @@ class PromptBuilder:
     def _build_system_prompt(self, lead: Lead, allowed_tools: list[str]) -> str:
         template = self._load_template("system_prompt.txt")
 
+        # Show what we have collected and what is still missing
+        collected = []
+        missing = []
+
+        if lead.preferred_location:
+            collected.append(f"Location: {lead.preferred_location}")
+        else:
+            missing.append("Location (ask where they want to live)")
+
+        if lead.budget_min is not None and lead.budget_max is not None:
+            collected.append(f"Budget: ₹{lead.budget_min:,.0f} – ₹{lead.budget_max:,.0f}")
+        else:
+            missing.append("Budget range (ask for min and max)")
+
+        if lead.bedrooms is not None:
+            collected.append(f"Bedrooms: {lead.bedrooms} BHK")
+        else:
+            missing.append("Bedrooms (ask how many BHK)")
+
+        if lead.preferences:
+            collected.append(f"Preferences: {', '.join(lead.preferences)}")
+
         context_block = (
             f"\n\n--- CURRENT CONTEXT ---\n"
             f"Lead Name: {lead.name}\n"
             f"Lead Status: {lead.status.value}\n"
-            f"Budget: {lead.budget_min} - {lead.budget_max}\n"
-            f"Location: {lead.preferred_location}\n"
+            f"\n"
+            f"✅ Collected: {'; '.join(collected) if collected else 'Nothing yet'}\n"
+            f"❓ Still needed: {'; '.join(missing) if missing else 'All required info collected!'}\n"
+            f"\n"
             f"Allowed Tools: {', '.join(allowed_tools)}\n"
             f"--- END CONTEXT ---\n"
         )
@@ -59,7 +83,8 @@ class PromptBuilder:
             "- Only call tools from the 'Allowed Tools' list.\n"
             "- Never fabricate property data.\n"
             "- Follow the state machine — invalid transitions will be rejected.\n"
-            "- Collect requirements before validating budget.\n"
+            "- Collect ALL required info (location, budget, bedrooms) before validating budget.\n"
+            "- If 'Still needed' shows missing fields, ask about them BEFORE calling any transition tools.\n"
             "- Validate budget before property matching.\n"
             "--- END RULES ---\n"
         )

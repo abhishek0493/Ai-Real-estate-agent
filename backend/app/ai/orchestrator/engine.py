@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -12,6 +13,8 @@ from app.ai.tools.schema import ToolCall
 from app.ai.tools.validator import ToolValidationError, ToolValidator
 from app.domain.entities.lead import Lead, LeadStatus
 from app.domain.exceptions import DomainException
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -97,17 +100,19 @@ class AIOrchestrator:
         """Validate and execute a tool call, then ask the LLM to respond."""
         tool_call = ToolCall(name=tool_call_result.name, arguments=tool_call_result.arguments)
 
-        # Validate
+        # Validate — on failure, recover gracefully
         try:
             self._validator.validate(tool_call, lead.status)
         except ToolValidationError as e:
-            return AIResponse(
-                assistant_message=f"I tried to use a tool but it was not allowed: {e.message}",
-                error=e.message,
-                updated_state=lead.status.value,
+            logger.warning(
+                "Tool validation failed: tool=%s state=%s error=%s",
+                tool_call.name, lead.status.value, e.message,
+            )
+            return await self._recover_from_error(
+                lead, messages, tool_schemas, e.message,
             )
 
-        # Execute
+        # Execute — on failure, recover gracefully
         entry = self._registry.get_tool(tool_call.name)
         assert entry is not None  # validator already checked existence
         _, handler = entry
@@ -115,11 +120,13 @@ class AIOrchestrator:
         try:
             result = await handler(lead, **tool_call.arguments)
         except DomainException as e:
-            return AIResponse(
-                assistant_message=f"Action failed: {e.message}",
+            logger.warning(
+                "Domain exception during tool execution: tool=%s error=%s",
+                tool_call.name, e.message,
+            )
+            return await self._recover_from_error(
+                lead, messages, tool_schemas, e.message,
                 executed_tool=tool_call.name,
-                error=e.message,
-                updated_state=lead.status.value,
             )
 
         # Follow-up LLM call: tell the LLM what happened and let it
@@ -151,5 +158,47 @@ class AIOrchestrator:
             assistant_message=assistant_message,
             executed_tool=tool_call.name,
             tool_result=result,
+            updated_state=lead.status.value,
+        )
+
+    async def _recover_from_error(
+        self,
+        lead: Lead,
+        messages: list[dict[str, str]],
+        tool_schemas: list[dict[str, Any]],
+        error_detail: str,
+        executed_tool: str | None = None,
+    ) -> AIResponse:
+        """Ask the LLM to generate a natural recovery response.
+
+        Instead of exposing internal errors to the user, we tell the LLM
+        what went wrong and ask it to continue the conversation with a
+        helpful follow-up question.
+        """
+        recovery_messages = messages + [
+            {
+                "role": "system",
+                "content": (
+                    f"An internal action could not be completed: {error_detail}. "
+                    "Do NOT tell the user about this error. Instead, continue the "
+                    "conversation naturally. Ask the next logical clarifying question "
+                    "to gather the information needed. For example, ask about their "
+                    "budget, preferred location, or number of bedrooms. "
+                    "Be helpful and conversational."
+                ),
+            },
+        ]
+
+        recovery = await self._llm.chat(recovery_messages, tool_schemas)
+        fallback = (
+            recovery.message
+            or "I'm gathering some details to find the best property options for you. "
+               "Could you tell me more about what you're looking for?"
+        )
+
+        return AIResponse(
+            assistant_message=fallback,
+            executed_tool=executed_tool,
+            error=error_detail,
             updated_state=lead.status.value,
         )

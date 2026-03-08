@@ -31,7 +31,7 @@ class ChatService:
         self._conv_repo = ConversationRepository(db)
         self._orchestrator = AIOrchestrator(
             llm_client=llm_client,
-            registry=build_default_registry(),
+            registry=build_default_registry(db=db),
         )
 
     async def handle_message(

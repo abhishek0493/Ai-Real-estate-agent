@@ -42,6 +42,8 @@ class Lead:
         budget_min: float | None = None,
         budget_max: float | None = None,
         preferred_location: str = "",
+        bedrooms: int | None = None,
+        preferences: list[str] | None = None,
         status: LeadStatus = LeadStatus.INIT,
         id: LeadId | None = None,
     ) -> None:
@@ -53,6 +55,8 @@ class Lead:
         self.budget_min = budget_min
         self.budget_max = budget_max
         self.preferred_location = preferred_location
+        self.bedrooms = bedrooms
+        self.preferences: list[str] = preferences or []
         self._status = status
 
     # ── Status (read-only property) ──────────────────────────────────

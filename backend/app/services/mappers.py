@@ -19,6 +19,7 @@ def model_to_domain(model: LeadModel) -> Lead:
         budget_min=model.budget_min,
         budget_max=model.budget_max,
         preferred_location=model.preferred_location,
+        bedrooms=model.bedrooms,
         status=LeadStatus(model.status),
     )
 
@@ -36,6 +37,7 @@ def domain_to_model(lead: Lead, *, existing: LeadModel | None = None) -> LeadMod
         existing.budget_min = lead.budget_min
         existing.budget_max = lead.budget_max
         existing.preferred_location = lead.preferred_location
+        existing.bedrooms = lead.bedrooms
         existing.status = lead.status.value
         return existing
 
@@ -48,5 +50,6 @@ def domain_to_model(lead: Lead, *, existing: LeadModel | None = None) -> LeadMod
         budget_min=lead.budget_min,
         budget_max=lead.budget_max,
         preferred_location=lead.preferred_location,
+        bedrooms=lead.bedrooms,
         status=lead.status.value,
     )

@@ -21,7 +21,7 @@ class ToolValidationError(Exception):
 # If a state is absent, no tools at all are allowed in that state.
 _STATE_TOOL_ALLOWLIST: dict[LeadStatus, frozenset[str]] = {
     LeadStatus.INIT: frozenset({"start_collection"}),
-    LeadStatus.COLLECTING_REQUIREMENTS: frozenset({"update_budget", "set_location", "validate_budget"}),
+    LeadStatus.COLLECTING_REQUIREMENTS: frozenset({"update_budget", "set_location", "validate_budget", "update_preferences", "set_bedrooms"}),
     LeadStatus.VALIDATING_BUDGET: frozenset({"move_to_matching"}),
     LeadStatus.MATCHING_PROPERTIES: frozenset({"get_matching_properties", "start_negotiation"}),
     LeadStatus.NEGOTIATING: frozenset({"evaluate_budget", "confirm_interest"}),
