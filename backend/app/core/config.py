@@ -27,6 +27,8 @@ class Settings(BaseSettings):
 
     # Redis
     REDIS_URL: str = "redis://redis:6379/0"
+    REDIS_STATE_TTL_SECONDS: int = 86400  # 24 hours
+    REDIS_KEY_PREFIX: str = "ai_re"
 
     # Celery
     CELERY_BROKER_URL: str = "redis://redis:6379/1"

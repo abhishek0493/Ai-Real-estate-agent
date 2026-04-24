@@ -5,11 +5,14 @@ from __future__ import annotations
 import logging
 from uuid import UUID
 
+import redis.asyncio as aioredis
 from sqlalchemy.orm import Session
 
 from app.ai.llm.base import LLMClient
 from app.ai.orchestrator.engine import AIOrchestrator
+from app.ai.orchestrator.state_manager import ConversationStateManager
 from app.ai.tools import build_default_registry
+from app.core.config import get_settings
 from app.models.conversation import ConversationMessageModel
 from app.models.lead import LeadModel
 from app.repositories.conversation_repository import ConversationRepository
@@ -25,13 +28,30 @@ class ChatService:
     The route handler is kept thin — all coordination lives here.
     """
 
-    def __init__(self, db: Session, llm_client: LLMClient) -> None:
+    def __init__(
+        self,
+        db: Session,
+        llm_client: LLMClient,
+        redis_client: aioredis.Redis | None = None,
+    ) -> None:
         self._db = db
         self._lead_repo = LeadRepository(db)
         self._conv_repo = ConversationRepository(db)
+
+        # Build state manager if Redis is available
+        self._state_manager: ConversationStateManager | None = None
+        if redis_client is not None:
+            settings = get_settings()
+            self._state_manager = ConversationStateManager(
+                redis=redis_client,
+                key_prefix=settings.REDIS_KEY_PREFIX,
+                ttl_seconds=settings.REDIS_STATE_TTL_SECONDS,
+            )
+
         self._orchestrator = AIOrchestrator(
             llm_client=llm_client,
             registry=build_default_registry(db=db),
+            state_manager=self._state_manager,
         )
 
     async def handle_message(
@@ -52,6 +72,12 @@ class ChatService:
 
         # 3. Convert DB model → domain entity
         domain_lead = model_to_domain(lead_model)
+
+        # 3a. Ensure conversation state exists in Redis
+        if self._state_manager is not None:
+            cached = await self._state_manager.get_state(domain_lead.id)
+            if cached is None:
+                await self._state_manager.initialize(domain_lead)
 
         # 4. Call AI orchestrator
         ai_response = await self._orchestrator.process_message(
@@ -74,6 +100,22 @@ class ChatService:
 
         # 7. Commit the transaction
         self._db.commit()
+
+        # 8. Append message summaries to Redis (after commit, non-critical)
+        if self._state_manager is not None:
+            try:
+                await self._state_manager.append_message_summary(
+                    domain_lead.id, "user", user_message,
+                )
+                await self._state_manager.append_message_summary(
+                    domain_lead.id, "assistant", ai_response.assistant_message,
+                )
+            except Exception:
+                logger.warning(
+                    "Failed to append message summaries to Redis for lead %s",
+                    lead_model.id,
+                    exc_info=True,
+                )
 
         return {
             "assistant_message": ai_response.assistant_message,

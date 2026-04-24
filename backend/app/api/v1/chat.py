@@ -5,11 +5,13 @@ from __future__ import annotations
 import logging
 from typing import Annotated
 
+import redis.asyncio as aioredis
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.ai.llm.openai_client import OpenAIClient
 from app.core.config import Settings, get_settings
+from app.core.redis import get_redis
 from app.db.session import get_db
 from app.dependencies.tenant import get_current_tenant
 from app.models.tenant import TenantModel
@@ -27,13 +29,14 @@ async def chat(
     tenant: Annotated[TenantModel, Depends(get_current_tenant)],
     db: Annotated[Session, Depends(get_db)],
     settings: Annotated[Settings, Depends(get_settings)],
+    redis: Annotated[aioredis.Redis, Depends(get_redis)],
 ) -> ChatResponse:
     """Process a user message through the AI pipeline.
 
     Thin controller — all logic lives in ChatService.
     """
     llm_client = OpenAIClient(api_key=settings.LLM_API_KEY, model=settings.LLM_MODEL)
-    service = ChatService(db=db, llm_client=llm_client)
+    service = ChatService(db=db, llm_client=llm_client, redis_client=redis)
 
     try:
         result = await service.handle_message(

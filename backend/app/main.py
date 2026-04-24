@@ -15,7 +15,7 @@ from app.api.v1.router import api_v1_router
 from app.core.config import Settings, get_settings
 from app.core.exceptions import register_exception_handlers
 from app.core.logging import setup_logging
-from app.core.redis import get_redis
+from app.core.redis import close_redis, get_redis
 from app.db.session import get_db
 
 logger = logging.getLogger(__name__)
@@ -28,6 +28,7 @@ async def lifespan(app: FastAPI):  # type: ignore[no-untyped-def]
     logger.info("Application starting up")
     yield
     logger.info("Application shutting down")
+    await close_redis()
 
 
 app = FastAPI(

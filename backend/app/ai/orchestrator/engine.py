@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from app.ai.llm.base import LLMClient, ToolCallResult
 from app.ai.orchestrator.prompt_builder import PromptBuilder
@@ -13,6 +13,9 @@ from app.ai.tools.schema import ToolCall
 from app.ai.tools.validator import ToolValidationError, ToolValidator
 from app.domain.entities.lead import Lead, LeadStatus
 from app.domain.exceptions import DomainException
+
+if TYPE_CHECKING:
+    from app.ai.orchestrator.state_manager import ConversationStateManager
 
 logger = logging.getLogger(__name__)
 
@@ -43,11 +46,13 @@ class AIOrchestrator:
         llm_client: LLMClient,
         registry: ToolRegistry,
         prompt_version: str = "v1",
+        state_manager: ConversationStateManager | None = None,
     ) -> None:
         self._llm = llm_client
         self._registry = registry
         self._validator = ToolValidator(registry)
         self._prompt_builder = PromptBuilder(version=prompt_version)
+        self._state_manager = state_manager
 
     async def process_message(
         self,
@@ -84,7 +89,10 @@ class AIOrchestrator:
                 lead, llm_response.tool_call, messages, tool_schemas,
             )
 
-        # 4. Plain message
+        # 4. Plain message — still record the turn in Redis
+        if self._state_manager is not None:
+            await self._state_manager.record_turn(lead.id, tool_name=None, error=None)
+
         return AIResponse(
             assistant_message=llm_response.message,
             updated_state=lead.status.value,
@@ -154,6 +162,13 @@ class AIOrchestrator:
         follow_up = await self._llm.chat(follow_up_messages, tool_schemas)
         assistant_message = follow_up.message or f"Executed {tool_call.name}."
 
+        # Sync state to Redis after successful tool execution
+        if self._state_manager is not None:
+            await self._state_manager.sync_from_lead(lead)
+            await self._state_manager.record_turn(
+                lead.id, tool_name=tool_call.name, error=None,
+            )
+
         return AIResponse(
             assistant_message=assistant_message,
             executed_tool=tool_call.name,
@@ -195,6 +210,12 @@ class AIOrchestrator:
             or "I'm gathering some details to find the best property options for you. "
                "Could you tell me more about what you're looking for?"
         )
+
+        # Record the failed turn in Redis
+        if self._state_manager is not None:
+            await self._state_manager.record_turn(
+                lead.id, tool_name=executed_tool, error=error_detail,
+            )
 
         return AIResponse(
             assistant_message=fallback,

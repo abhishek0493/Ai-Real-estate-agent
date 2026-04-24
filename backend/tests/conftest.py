@@ -21,30 +21,49 @@ from app.models.tenant import TenantModel
 import app.models  # noqa: F401
 
 
-# ── Test DB engine ───────────────────────────────────────────────────
+# ── Test DB engine (lazily created) ──────────────────────────────────
 
-_settings = get_settings()
-_test_engine = create_engine(_settings.DATABASE_URL, pool_pre_ping=True)
-_TestSession = sessionmaker(bind=_test_engine, autocommit=False, autoflush=False)
+_test_engine = None
+_TestSession = None
 
 
-@pytest.fixture(scope="session", autouse=True)
+def _get_test_engine():
+    """Lazily create the test DB engine on first use."""
+    global _test_engine, _TestSession
+    if _test_engine is None:
+        _settings = get_settings()
+        _test_engine = create_engine(_settings.DATABASE_URL, pool_pre_ping=True)
+        _TestSession = sessionmaker(bind=_test_engine, autocommit=False, autoflush=False)
+    return _test_engine
+
+
+def _get_test_session():
+    """Return the test session factory, creating engine if needed."""
+    _get_test_engine()
+    return _TestSession
+
+
+@pytest.fixture(scope="session", autouse=False)
 def create_tables() -> Generator[None, None, None]:
-    Base.metadata.create_all(bind=_test_engine)
+    engine = _get_test_engine()
+    Base.metadata.create_all(bind=engine)
     yield
-    Base.metadata.drop_all(bind=_test_engine)
+    Base.metadata.drop_all(bind=engine)
 
 
 @pytest.fixture
-def db() -> Generator[Session, None, None]:
+def db(create_tables) -> Generator[Session, None, None]:
     """Yield a DB session wrapped in a SAVEPOINT that is rolled back after use.
 
     This ensures every test (including those that call db.commit()) is
     fully isolated without data leaking between tests.
     """
-    connection = _test_engine.connect()
+    engine = _get_test_engine()
+    TestSession = _get_test_session()
+
+    connection = engine.connect()
     transaction = connection.begin()
-    session = _TestSession(bind=connection)
+    session = TestSession(bind=connection)
 
     # Start a SAVEPOINT so that session.commit() inside tests only
     # releases the savepoint, not the outer transaction.
