@@ -91,7 +91,7 @@ This is a **multi-tenant SaaS AI chatbot** for real estate companies. A buyer ch
 | **Task Queue**    | Celery (Redis broker)                        |
 | **LLM**           | OpenAI GPT (gpt-3.5-turbo / gpt-4o-mini)     |
 | **Auth**          | JWT (python-jose) + bcrypt                   |
-| **Container**     | Docker + docker-compose                      |
+| **Container**     | Docker + docker compose                      |
 | **Language**      | Python 3.11+                                 |
 
 ---
@@ -102,7 +102,7 @@ This is a **multi-tenant SaaS AI chatbot** for real estate companies. A buyer ch
 AI Real estate agent/
 ├── .env                          # Environment variables
 ├── .env.example                  # Template for .env
-├── docker-compose.yml            # Spins up backend + postgres + redis + celery
+├── docker compose.yml            # Spins up backend + postgres + redis + celery
 ├── Makefile                      # Convenience commands (make up, make test, etc.)
 │
 ├── backend/
@@ -426,7 +426,7 @@ make build
 make up
 
 # Or directly:
-docker-compose up -d --build
+docker compose up -d --build
 ```
 
 This starts:
@@ -442,7 +442,7 @@ This starts:
 make migrate
 
 # Or directly:
-docker-compose exec backend alembic upgrade head
+docker compose exec backend alembic upgrade head
 ```
 
 ### Step 4: Provision a Test Tenant
@@ -451,10 +451,13 @@ You need a tenant to make API calls. Use the admin provisioning endpoint or crea
 
 ```bash
 # Connect to the running backend container
-docker-compose exec backend python -c "
-from app.db.session import SessionLocal
+docker compose exec backend python -c "
+from app.core.config import get_settings
+from app.db.session import _get_session_factory
 from app.services.tenant_provisioning_service import TenantProvisioningService
 
+settings = get_settings()
+SessionLocal = _get_session_factory(settings)
 db = SessionLocal()
 service = TenantProvisioningService(db)
 tenant = service.provision_full(name='Demo Realty', email='demo@realty.com')
@@ -603,7 +606,7 @@ While the app is running, you can peek at Redis:
 
 ```bash
 # Connect to Redis CLI inside Docker
-docker-compose exec redis redis-cli
+docker compose exec redis redis-cli
 
 # List all conversation state keys
 KEYS ai_re:conv:*
@@ -631,14 +634,14 @@ cd backend
 python -m pytest tests/unit/ -v
 
 # Or inside Docker
-docker-compose exec backend pytest tests/unit/ -v
+docker compose exec backend pytest tests/unit/ -v
 ```
 
 ### Integration Tests (requires PostgreSQL)
 
 ```bash
 # Inside Docker (DB is available)
-docker-compose exec backend pytest tests/ -v
+docker compose exec backend pytest tests/ -v
 
 # Or via Makefile
 make test
@@ -685,7 +688,7 @@ pip install email-validator
 Make sure Redis is running:
 
 ```bash
-docker-compose ps redis
+docker compose ps redis
 # Should show "Up"
 ```
 
@@ -706,13 +709,13 @@ The integration tests need PostgreSQL. Either:
 
 ```bash
 # All services
-docker-compose logs -f
+docker compose logs -f
 
 # Just the backend
-docker-compose logs -f backend
+docker compose logs -f backend
 
 # Celery worker
-docker-compose logs -f celery-worker
+docker compose logs -f celery-worker
 ```
 
 ---

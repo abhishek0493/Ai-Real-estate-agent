@@ -45,6 +45,9 @@ class Settings(BaseSettings):
     # CORS
     CORS_ORIGINS: str = "http://localhost:3000,http://localhost:3001"
 
+    # Super Admin Tenant Generation
+    SUPER_ADMIN_TENANT_GENERATE_KEY: str = ""
+
     @property
     def cors_origin_list(self) -> list[str]:
         return [origin.strip() for origin in self.CORS_ORIGINS.split(",")]

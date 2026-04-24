@@ -66,6 +66,13 @@ export const leadsApi = {
   detail: (id: string) => api.get<LeadDetail>(`/admin/leads/${id}`),
 };
 
+/* ── Tenants ──────────────────────────────────────────────────────── */
+
+export const tenantApi = {
+  generate: (data: { name: string; email: string; secret_key: string }) =>
+    api.post<Tenant>("/tenants/generate", data),
+};
+
 /* ── Types ────────────────────────────────────────────────────────── */
 
 export interface User {
@@ -121,6 +128,12 @@ export interface ConversationMessage {
 
 export interface LeadDetail extends Lead {
   conversation_history: ConversationMessage[];
+}
+
+export interface Tenant {
+  id: string;
+  name: string;
+  api_key: string;
 }
 
 export default api;
